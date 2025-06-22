@@ -97,10 +97,4 @@ export const cleanData = removeOutliers(CARS, {
 
 console.log("Cleaned data length:", cleanData.length);
 
-const extraStrict = removeOutliers(CARS, {
-	iqrMultiplier: 1.0,
-}); // Even stricter bounds
-
-const customStrict = removeOutliers(CARS, {
-	iqrMultiplier: 0.8,
-}); // Ultra-strict for highly curated datasets
+// 1.5 is standard, 1.0 is stricter, 0.8 is very strict

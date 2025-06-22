@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useId, useMemo, useState } from "react";
 import { AvgMpgOverTime } from "../components/AvgMpgOvertime";
 import { CorrelationMatrix } from "../components/CorrelationMatrix";
-import { CARS, type Car, cleanData } from "../utils/index";
+import { type Car, cleanData } from "../utils/index";
 
 export const Route = createFileRoute("/charts")({
 	component: RouteComponent,
