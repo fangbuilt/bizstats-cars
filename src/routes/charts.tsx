@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useId, useMemo, useState } from "react";
 import { AvgMpgOverTime } from "../components/AvgMpgOvertime";
 import { CorrelationMatrix } from "../components/CorrelationMatrix";
-import { CARS, type Car } from "../utils/index";
+import { CARS, type Car, cleanData } from "../utils/index";
 
 export const Route = createFileRoute("/charts")({
 	component: RouteComponent,
@@ -42,8 +42,8 @@ function RouteComponent() {
 	return (
 		<div className="min-h-screen flex flex-col gap-6 py-6 items-center justify-center bg-slate-100">
 			<FuelEfficiencyRank />
-			<AvgMpgOverTime data={CARS} />
-			<CorrelationMatrix data={CARS} />
+			<AvgMpgOverTime data={cleanData} />
+			<CorrelationMatrix data={cleanData} />
 		</div>
 	);
 }
@@ -61,6 +61,12 @@ function FuelEfficiencyRank() {
 		selectedMetric: "cityMpg",
 	});
 
+	const [expandedGroup, setExpandedGroup] = useState<number | null>(null);
+
+	function toggleGroup(val: number) {
+		setExpandedGroup((prev) => (prev === val ? null : val));
+	}
+
 	const drivelineId = useId();
 	const transmissionId = useId();
 	const metricId = useId();
@@ -68,10 +74,12 @@ function FuelEfficiencyRank() {
 	const { drivelineOptions, transmissionOptions } = useMemo(
 		() => ({
 			drivelineOptions: [
-				...new Set(CARS.map((car) => car["Engine Information"].Driveline)),
+				...new Set(cleanData.map((car) => car["Engine Information"].Driveline)),
 			],
 			transmissionOptions: [
-				...new Set(CARS.map((car) => car["Engine Information"].Transmission)),
+				...new Set(
+					cleanData.map((car) => car["Engine Information"].Transmission),
+				),
 			],
 		}),
 		[],
@@ -85,30 +93,43 @@ function FuelEfficiencyRank() {
 	);
 
 	const rankedCars = useMemo(() => {
-		const filtered = CARS.filter((car) => {
+		const filtered = cleanData.filter((car) => {
 			if (
 				filters.driveline &&
 				car["Engine Information"].Driveline !== filters.driveline
-			) {
+			)
 				return false;
-			}
+
 			if (
 				filters.transmission &&
 				car["Engine Information"].Transmission !== filters.transmission
-			) {
+			)
 				return false;
-			}
+
 			return true;
 		});
 
-		return [...filtered]
-			.filter((car) => selectedMetricConfig.getValue(car) !== null)
-			.sort((a, b) => {
-				const aVal = selectedMetricConfig.getValue(a) as number;
-				const bVal = selectedMetricConfig.getValue(b) as number;
-				return bVal - aVal;
-			})
-			.slice(0, 10);
+		const groups = new Map<number, Car[]>();
+
+		for (const car of filtered) {
+			const val = selectedMetricConfig.getValue(car);
+			if (val == null) continue;
+
+			if (!groups.has(val)) {
+				groups.set(val, []);
+			}
+			groups.get(val)?.push(car);
+		}
+
+		const sortedGroups = [...groups.entries()]
+			.sort((a, b) => b[0] - a[0]) // Descending value
+			.slice(0, 10); // Top 10 metric *groups*
+
+		return sortedGroups.map(([value, cars], index) => ({
+			rank: index + 1,
+			value,
+			cars,
+		}));
 	}, [filters, selectedMetricConfig]);
 
 	const updateFilters = (updates: Partial<FilterState>) => {
@@ -203,30 +224,57 @@ function FuelEfficiencyRank() {
 						</tr>
 					</thead>
 					<tbody>
-						{rankedCars.map((car, index) => {
-							const size = `${car.Dimensions.Length}L × ${car.Dimensions.Width}W × ${car.Dimensions.Height}H`;
-							const value = selectedMetricConfig.getValue(car);
-
-							return (
+						{rankedCars.map((group) => (
+							<>
 								<tr
-									key={`${car.Identification.ID}-${car.Identification.Year}-${index}`}
-									className="even:bg-slate-100"
+									key={`group-${group.value}`}
+									className="bg-slate-100 cursor-pointer hover:bg-slate-200"
+									onClick={() => toggleGroup(group.value)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											toggleGroup(group.value);
+										}
+									}}
+									tabIndex={0}
 								>
-									<td className="p-3">{index + 1}</td>
-									<td className="p-3">{car.Identification.ID}</td>
-									<td className="p-3">{value}</td>
-									<td className="p-3">
-										{car["Engine Information"].Transmission}
-									</td>
-									<td className="p-3">{car["Engine Information"].Driveline}</td>
-									<td className="p-3">
-										{car["Engine Information"]["Number of Forward Gears"]}
-									</td>
-									<td className="p-3">{car.Identification.Year}</td>
-									<td className="p-3">{size}</td>
+									<td className="p-3 font-bold">{group.rank}</td>
+									<td className="p-3 font-bold">{group.cars.length} cars</td>
+									<td className="p-3 font-bold">{group.value}</td>
+									<td className="p-3 font-bold">...</td>
+									<td className="p-3 font-bold">...</td>
+									<td className="p-3 font-bold">...</td>
+									<td className="p-3 font-bold">...</td>
+									<td className="p-3 font-bold">...</td>
 								</tr>
-							);
-						})}
+
+								{expandedGroup === group.value &&
+									group.cars.map((car, index) => {
+										const size = `${car.Dimensions.Length}L × ${car.Dimensions.Width}W × ${car.Dimensions.Height}H`;
+
+										return (
+											<tr
+												key={`${car.Identification.ID}-${car.Identification.Year}-${index}`}
+												className="bg-white"
+											>
+												<td className="p-3" />
+												<td className="p-3">{car.Identification.ID}</td>
+												<td className="p-3">{group.value}</td>
+												<td className="p-3">
+													{car["Engine Information"].Transmission}
+												</td>
+												<td className="p-3">
+													{car["Engine Information"].Driveline}
+												</td>
+												<td className="p-3">
+													{car["Engine Information"]["Number of Forward Gears"]}
+												</td>
+												<td className="p-3">{car.Identification.Year}</td>
+												<td className="p-3">{size}</td>
+											</tr>
+										);
+									})}
+							</>
+						))}
 					</tbody>
 				</table>
 			</div>
